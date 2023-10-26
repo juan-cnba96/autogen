@@ -1,3 +1,4 @@
+from autogen.agentchat.user_proxy_agent import UserProxyOutputHandler
 from .conversable_agent import ConversableAgent
 from typing import Callable, Dict, Optional, Union
 
@@ -62,5 +63,7 @@ Reply "TERMINATE" in the end when everything is done.
             human_input_mode,
             code_execution_config=code_execution_config,
             llm_config=llm_config,
+            input_handler=None,
+            output_handler=UserProxyOutputHandler(self),
             **kwargs,
         )

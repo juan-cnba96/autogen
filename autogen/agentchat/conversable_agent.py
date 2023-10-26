@@ -6,6 +6,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from autogen import oai
 from .agent import Agent
+from autogen.io_utils import HumanInputHandler, OutputHandler
 from autogen.code_utils import (
     DEFAULT_MODEL,
     UNKNOWN,
@@ -23,6 +24,49 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+class PrintOutputHandler(OutputHandler):
+    def __init__(self, receiver: Agent) -> None:
+        super().__init__()
+        self._receiver = receiver
+    
+    @property
+    def receiver(self) -> Agent:
+        return self._receiver
+    
+    @receiver.setter
+    def receiver(self, receiver: Agent) -> None:
+        self._receiver = receiver
+
+    def output(self, message: Union[Dict, str], sender: Agent):
+        # print the message received
+        print(colored(sender.name, "yellow"), "(to", f"{self._receiver.name}):\n", flush=True)
+        if message.get("role") == "function":
+            func_print = f"***** Response from calling function \"{message['name']}\" *****"
+            print(colored(func_print, "green"), flush=True)
+            print(message["content"], flush=True)
+            print(colored("*" * len(func_print), "green"), flush=True)
+        else:
+            content = message.get("content")
+            if content is not None:
+                if "context" in message:
+                    content = oai.ChatCompletion.instantiate(
+                        content,
+                        message["context"],
+                        self._receiver.llm_config and self._receiver.llm_config.get("allow_format_str_template", False),
+                    )
+                print(content, flush=True)
+            if "function_call" in message:
+                func_print = f"***** Suggested function Call: {message['function_call'].get('name', '(No function name found)')} *****"
+                print(colored(func_print, "green"), flush=True)
+                print(
+                    "Arguments: \n",
+                    message["function_call"].get("arguments", "(No arguments found)"),
+                    flush=True,
+                    sep="",
+                )
+                print(colored("*" * len(func_print), "green"), flush=True)
+        print("\n", "-" * 80, flush=True, sep="")
 
 
 class ConversableAgent(Agent):
@@ -56,6 +100,8 @@ class ConversableAgent(Agent):
         code_execution_config: Optional[Union[Dict, bool]] = None,
         llm_config: Optional[Union[Dict, bool]] = None,
         default_auto_reply: Optional[Union[str, Dict, None]] = "",
+        input_handler: Optional[HumanInputHandler] = None,
+        output_handler: Optional[OutputHandler] = None
     ):
         """
         Args:
@@ -126,7 +172,10 @@ class ConversableAgent(Agent):
         self.register_reply([Agent, None], ConversableAgent.generate_oai_reply)
         self.register_reply([Agent, None], ConversableAgent.generate_code_execution_reply)
         self.register_reply([Agent, None], ConversableAgent.generate_function_call_reply)
-        self.register_reply([Agent, None], ConversableAgent.check_termination_and_human_reply)
+        self.register_reply([Agent, None], ConversableAgent.check_termination_and_human_reply, config={"async": False})
+        self.register_reply([Agent, None], ConversableAgent.a_check_termination_and_human_reply, config={"async": True})
+        self.output_handler = PrintOutputHandler(self) if output_handler is None else output_handler
+        self.input_handler = HumanInputHandler() if input_handler is None else input_handler
 
     def register_reply(
         self,
@@ -386,36 +435,6 @@ class ConversableAgent(Agent):
                 "Message can't be converted into a valid ChatCompletion message. Either content or function_call must be provided."
             )
 
-    def _print_received_message(self, message: Union[Dict, str], sender: Agent):
-        # print the message received
-        print(colored(sender.name, "yellow"), "(to", f"{self.name}):\n", flush=True)
-        if message.get("role") == "function":
-            func_print = f"***** Response from calling function \"{message['name']}\" *****"
-            print(colored(func_print, "green"), flush=True)
-            print(message["content"], flush=True)
-            print(colored("*" * len(func_print), "green"), flush=True)
-        else:
-            content = message.get("content")
-            if content is not None:
-                if "context" in message:
-                    content = oai.ChatCompletion.instantiate(
-                        content,
-                        message["context"],
-                        self.llm_config and self.llm_config.get("allow_format_str_template", False),
-                    )
-                print(content, flush=True)
-            if "function_call" in message:
-                func_print = f"***** Suggested function Call: {message['function_call'].get('name', '(No function name found)')} *****"
-                print(colored(func_print, "green"), flush=True)
-                print(
-                    "Arguments: \n",
-                    message["function_call"].get("arguments", "(No arguments found)"),
-                    flush=True,
-                    sep="",
-                )
-                print(colored("*" * len(func_print), "green"), flush=True)
-        print("\n", "-" * 80, flush=True, sep="")
-
     def _process_received_message(self, message, sender, silent):
         message = self._message_to_dict(message)
         # When the agent receives a message, the role of the message is "user". (If 'role' exists and is 'function', it will remain unchanged.)
@@ -425,7 +444,7 @@ class ConversableAgent(Agent):
                 "Received message can't be converted into a valid ChatCompletion message. Either content or function_call must be provided."
             )
         if not silent:
-            self._print_received_message(message, sender)
+            self.output_handler.output(message, sender)
 
     def receive(
         self,
@@ -667,18 +686,36 @@ class ConversableAgent(Agent):
         sender: Optional[Agent] = None,
         config: Optional[Any] = None,
     ) -> Tuple[bool, Union[str, Dict, None]]:
+        return asyncio.run(self._check_termination_and_human_reply_logic(messages, sender, config))
+    
+    async def a_check_termination_and_human_reply(
+        self,
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None,
+    ) -> Tuple[bool, Union[str, Dict, None]]:
+        return await self._check_termination_and_human_reply_logic(messages, sender, config)
+
+    async def _check_termination_and_human_reply_logic(
+        self,
+        messages: Optional[List[Dict]] = None,
+        sender: Optional[Agent] = None,
+        config: Optional[Any] = None,
+    ) -> Tuple[bool, Union[str, Dict, None]]:
+        print("inside check_termination_and_human_reply")
+
         """Check if the conversation should be terminated, and if human reply is provided."""
         if config is None:
             config = self
         if messages is None:
             messages = self._oai_messages[sender]
         message = messages[-1]
+        call_async = config.get("async", False)
         reply = ""
         no_human_input_msg = ""
         if self.human_input_mode == "ALWAYS":
-            reply = self.get_human_input(
-                f"Provide feedback to {sender.name}. Press enter to skip and use auto-reply, or type 'exit' to end the conversation: "
-            )
+            input_msg = f"Provide feedback to {sender.name}. Press enter to skip and use auto-reply, or type 'exit' to end the conversation: "
+            reply = await self.input_handler.wait_for_input(input_msg) if call_async else self.input_handler.get_human_input(input_msg)
             no_human_input_msg = "NO HUMAN INPUT RECEIVED." if not reply else ""
             # if the human input is empty, and the message is a termination message, then we will terminate the conversation
             reply = reply if reply or not self._is_termination_msg(message) else "exit"
@@ -689,11 +726,8 @@ class ConversableAgent(Agent):
                 else:
                     # self.human_input_mode == "TERMINATE":
                     terminate = self._is_termination_msg(message)
-                    reply = self.get_human_input(
-                        f"Please give feedback to {sender.name}. Press enter or type 'exit' to stop the conversation: "
-                        if terminate
-                        else f"Please give feedback to {sender.name}. Press enter to skip and use auto-reply, or type 'exit' to stop the conversation: "
-                    )
+                    input_msg = f"Please give feedback to {sender.name}. Press enter or type 'exit' to stop the conversation: " if terminate else f"Please give feedback to {sender.name}. Press enter to skip and use auto-reply, or type 'exit' to stop the conversation: "
+                    reply = await self.input_handler.wait_for_input(input_msg) if call_async else self.input_handler.get_human_input(input_msg)
                     no_human_input_msg = "NO HUMAN INPUT RECEIVED." if not reply else ""
                     # if the human input is empty, and the message is a termination message, then we will terminate the conversation
                     reply = reply if reply or not terminate else "exit"
@@ -702,9 +736,8 @@ class ConversableAgent(Agent):
                     reply = "exit"
                 else:
                     # self.human_input_mode == "TERMINATE":
-                    reply = self.get_human_input(
-                        f"Please give feedback to {sender.name}. Press enter or type 'exit' to stop the conversation: "
-                    )
+                    input_msg = f"Please give feedback to {sender.name}. Press enter or type 'exit' to stop the conversation: "
+                    reply = await self.input_handler.wait_for_input(input_msg) if call_async else self.input_handler.get_human_input(input_msg)
                     no_human_input_msg = "NO HUMAN INPUT RECEIVED." if not reply else ""
                     # if the human input is empty, and the message is a termination message, then we will terminate the conversation
                     reply = reply or "exit"
@@ -832,6 +865,9 @@ class ConversableAgent(Agent):
                         self, messages=messages, sender=sender, config=reply_func_tuple["config"]
                     )
                 else:
+                    # We need to check if async=False which means that we don't want to call this function when we are in async mode.
+                    if reply_func_tuple["config"] is not None and "async" in reply_func_tuple["config"] and reply_func_tuple["config"]["async"] is False:
+                        continue
                     final, reply = reply_func(self, messages=messages, sender=sender, config=reply_func_tuple["config"])
                 if final:
                     return reply

@@ -1,6 +1,15 @@
-from .conversable_agent import ConversableAgent
+from autogen.agentchat.agent import Agent
+from .conversable_agent import ConversableAgent, PrintOutputHandler
 from typing import Callable, Dict, Optional, Union
 
+class UserProxyOutputHandler(PrintOutputHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def output(self, message: Union[Dict, str], sender: Agent):
+        print("USER PROXY OUTPUT HANDLER ---- Start")
+        super().output(message, sender)
+        print("USER PROXY OUTPUT HANDLER ---- End")
 
 class UserProxyAgent(ConversableAgent):
     """(In preview) A proxy agent for the user, that can execute code and provide feedback to the other agents.
@@ -69,6 +78,8 @@ class UserProxyAgent(ConversableAgent):
             system_message (str): system message for ChatCompletion inference.
                 Only used when llm_config is not False. Use it to reprogram the agent.
         """
+        output_handler = UserProxyOutputHandler(self)
+
         super().__init__(
             name,
             system_message,
@@ -79,4 +90,6 @@ class UserProxyAgent(ConversableAgent):
             code_execution_config,
             llm_config,
             default_auto_reply,
+            None,
+            output_handler
         )
