@@ -25,3 +25,6 @@ class OutputHandler:
     def output(self, message: Union[Dict, str], sender: Agent) -> None:
         formatted_message = message if isinstance(message, str) else ", ".join(f"{key}: {value}" for key, value in message.items())
         print(f"From {sender}: {formatted_message}")
+    
+    def output_str(str_param):
+        print(str_param, flush=True)

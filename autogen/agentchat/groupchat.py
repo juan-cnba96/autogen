@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import sys
 from typing import Dict, List, Optional, Union
 
-from autogen.agentchat.user_proxy_agent import UserProxyOutputHandler
 from autogen.io_utils import OutputHandler
 from .agent import Agent
 from .conversable_agent import ConversableAgent
@@ -124,19 +123,13 @@ class GroupChatManager(ConversableAgent):
         human_input_mode: Optional[str] = "NEVER",
         system_message: Optional[str] = "Group chat manager.",
         # seed: Optional[int] = 4,
-        *,
-        output_handler: Optional[OutputHandler] = None,
         **kwargs,
     ):
-        if output_handler is not None:
-            output_handler.receiver = self
-            custom_output_handler = output_handler  else UserProxyOutputHandler(self)
         super().__init__(
             name=name,
             max_consecutive_auto_reply=max_consecutive_auto_reply,
             human_input_mode=human_input_mode,
             system_message=system_message,
-            output_handler=output_handler,
             **kwargs,
         )
         self.register_reply(Agent, GroupChatManager.run_chat, config={"groupchat": groupchat, "async": False}, reset_config=GroupChat.reset)

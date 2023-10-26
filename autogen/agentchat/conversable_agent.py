@@ -27,17 +27,12 @@ logger = logging.getLogger(__name__)
 
 class PrintOutputHandler(OutputHandler):
     def __init__(self, receiver: Agent) -> None:
+        if receiver is None:
+            raise ValueError("receiver cannot be None")
+
         super().__init__()
         self._receiver = receiver
     
-    @property
-    def receiver(self) -> Agent:
-        return self._receiver
-    
-    @receiver.setter
-    def receiver(self, receiver: Agent) -> None:
-        self._receiver = receiver
-
     def output(self, message: Union[Dict, str], sender: Agent):
         # print the message received
         print(colored(sender.name, "yellow"), "(to", f"{self._receiver.name}):\n", flush=True)
@@ -67,7 +62,9 @@ class PrintOutputHandler(OutputHandler):
                 )
                 print(colored("*" * len(func_print), "green"), flush=True)
         print("\n", "-" * 80, flush=True, sep="")
-
+    
+    def output_str(str_param):
+        print(str_param, flush=True)
 
 class ConversableAgent(Agent):
     """(In preview) A class for generic conversable agents which can be configured as assistant or user proxy.
@@ -702,7 +699,6 @@ class ConversableAgent(Agent):
         sender: Optional[Agent] = None,
         config: Optional[Any] = None,
     ) -> Tuple[bool, Union[str, Dict, None]]:
-        print("inside check_termination_and_human_reply")
 
         """Check if the conversation should be terminated, and if human reply is provided."""
         if config is None:
@@ -744,7 +740,7 @@ class ConversableAgent(Agent):
 
         # print the no_human_input_msg
         if no_human_input_msg:
-            print(colored(f"\n>>>>>>>> {no_human_input_msg}", "red"), flush=True)
+            self.output_handler.output_str(colored(f"\n>>>>>>>> {no_human_input_msg}", "red"))
 
         # stop the conversation
         if reply == "exit":
@@ -761,7 +757,7 @@ class ConversableAgent(Agent):
         # increment the consecutive_auto_reply_counter
         self._consecutive_auto_reply_counter[sender] += 1
         if self.human_input_mode != "NEVER":
-            print(colored("\n>>>>>>>> USING AUTO REPLY...", "red"), flush=True)
+            self.output_handler.output_str(colored("\n>>>>>>>> USING AUTO REPLY...", "red"))
 
         return False, None
 
@@ -927,12 +923,11 @@ class ConversableAgent(Agent):
             lang, code = code_block
             if not lang:
                 lang = infer_lang(code)
-            print(
+            self.output_handler.output_str(
                 colored(
                     f"\n>>>>>>>> EXECUTING CODE BLOCK {i} (inferred language is {lang})...",
                     "red",
-                ),
-                flush=True,
+                )
             )
             if lang in ["bash", "shell", "sh"]:
                 exitcode, logs, image = self.run_code(code, lang=lang, **self._code_execution_config)
@@ -1020,9 +1015,8 @@ class ConversableAgent(Agent):
 
             # Try to execute the function
             if arguments is not None:
-                print(
-                    colored(f"\n>>>>>>>> EXECUTING FUNCTION {func_name}...", "magenta"),
-                    flush=True,
+                self.output_handler.output_str(
+                    colored(f"\n>>>>>>>> EXECUTING FUNCTION {func_name}...", "magenta")
                 )
                 try:
                     content = func(**arguments)
