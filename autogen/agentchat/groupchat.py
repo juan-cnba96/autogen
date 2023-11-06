@@ -132,8 +132,18 @@ class GroupChatManager(ConversableAgent):
             system_message=system_message,
             **kwargs,
         )
-        self.register_reply(Agent, GroupChatManager.run_chat, config={"groupchat": groupchat, "async": False}, reset_config=GroupChat.reset)
-        self.register_reply(Agent, GroupChatManager.a_run_chat, config={"groupchat": groupchat, "async": True}, reset_config=GroupChat.reset)
+        self.register_reply(
+            Agent,
+            GroupChatManager.run_chat,
+            config={"groupchat": groupchat, "async": False},
+            reset_config=GroupChat.reset,
+        )
+        self.register_reply(
+            Agent,
+            GroupChatManager.a_run_chat,
+            config={"groupchat": groupchat, "async": True},
+            reset_config=GroupChat.reset,
+        )
         # self._random = random.Random(seed)
 
     def run_chat(
@@ -222,6 +232,6 @@ class GroupChatManager(ConversableAgent):
             if reply is None:
                 break
             # The speaker sends the message without requesting a reply
-            speaker.send(reply, self, request_reply=False)
+            await speaker.a_send(reply, self, request_reply=False)
             message = self.last_message(speaker)
         return True, None

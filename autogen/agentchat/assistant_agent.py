@@ -62,6 +62,5 @@ Reply "TERMINATE" in the end when everything is done.
             human_input_mode,
             code_execution_config=code_execution_config,
             llm_config=llm_config,
-            input_handler=None,
             **kwargs,
         )

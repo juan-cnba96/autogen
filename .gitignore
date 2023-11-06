@@ -167,3 +167,7 @@ wolfram.txt
 
 # DB on disk for TeachableAgent
 tmp/
+.python-version
+notebook/agentchat_dinner_time.ipynb
+notebook/paper/
+notebook/youtube.ipynb
