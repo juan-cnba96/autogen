@@ -3,6 +3,7 @@ from autogen.io_utils import HumanInputHandler, OutputHandler
 from .conversable_agent import ConversableAgent
 from typing import Callable, Dict, Optional, Union
 
+
 class UserProxyAgent(ConversableAgent):
     """(In preview) A proxy agent for the user, that can execute code and provide feedback to the other agents.
 
@@ -28,7 +29,7 @@ class UserProxyAgent(ConversableAgent):
         llm_config: Optional[Union[Dict, bool]] = False,
         system_message: Optional[str] = "",
         input_handler: Optional[HumanInputHandler] = None,
-        output_handler: Optional[OutputHandler] = None
+        output_handler: Optional[OutputHandler] = None,
     ):
         """
         Args:
@@ -83,5 +84,5 @@ class UserProxyAgent(ConversableAgent):
             llm_config,
             default_auto_reply,
             input_handler=input_handler,
-            output_handler=output_handler
+            output_handler=output_handler,
         )
